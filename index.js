@@ -12,8 +12,11 @@ db.sequelize.sync()
         console.log(`Failed to connect to database : ${error}`);
     })
 
-const mailRouter = require('./routes/MailRoutes');
-app.use(mailRouter);
+const emailRouter = require('./routes/EmailRoutes');
+app.use(emailRouter);
+
+const firebaseRouter = require('./routes/FirebaseRoutes');
+app.use(firebaseRouter);
 
 app.listen(process.env.PORT || 3000, () => {
     console.log("Server Running");

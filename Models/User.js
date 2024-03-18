@@ -2,6 +2,10 @@ const {sequelize, Sequelize} = require('./main');
 
 module.exports = (sequelize, Sequelize) => {
     const User = sequelize.define('User', {
+        userId : {
+            type: Sequelize.INTEGER,
+            allowNull: false
+        },
         email: {
             type: Sequelize.STRING,
             allowNull: false,
