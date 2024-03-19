@@ -1,82 +1,76 @@
-const FCM = require('fcm-node');
 const db = require('../Models/main');
 const { Op } = require('sequelize');
-require('dotenv').config();
+const ServiceResponse = require('../templates/ServiceResponse');
+const {fcm} = require('../config/MessagingConfig');
 
-const fcm = new FCM(process.env.FCM_SERVERKEY);
-
-exports.sendFirebaseNotificationToOneUser = async(req,res) => {
+exports.sendFirebaseNotificationToOneUser = async(userId, notification_title, notification_body) => {
     try {
-        const {userId, notification_title, notification_body} = req.body;
-        if(!userId || !notification_title || !notification_body){
-            res.status(400).send({message: 'user id and notification title and body are required'});
+        const user = await db.User.findOne({where: {
+            userId: userId
+        }});
+
+        if(!user){
+            return new ServiceResponse (400,'there is no user with that id',null)
         }
         else{
-            const user = await db.User.findOne({where: {
-                userId: userId
-            }});
-
-            if(!user){
-                res.status(400).send({message: 'there is no user with that id'});
+            if(!user.fcm_token){
+                return new ServiceResponse (400,'that user does not have firebase token',null)
             }
             else{
-                if(!user.fcm_token){
-                res.status(400).send({message: 'that user does not have firebase token'});
-                }
-                else{
-                    var message = {
-                        to: registration_tokens,
-        
-                        notification: {
-                            title: notification_title,
-                            body: notification_body
-                        }
-                    };
-        
-                    fcm.send(message, async(error,response) => {
-                        if(error){
-                            res.status(500).send({message: error.message});
-                        }
-                        else{
-                            await db.NotificationsLog.create({
-                                type: 'firebase',
-                                date: new Date(),
-                                title: mailTitle,
-                                content: mailContent,
-                                UserId: user.id
-                            });
+                var notification_message = {
+                    to: user.fcm_token,
+    
+                    notification: {
+                        title: notification_title,
+                        body: notification_body
+                    }
+                };
+    
+                fcm.send(notification_message, async(error,response) => {
+                    if(error){
+                        return new ServiceResponse (500,error.message,null)
+                    }
+                    else{
+                        await db.NotificationsLog.create({
+                            type: 'firebase',
+                            date: new Date(),
+                            title: mailTitle,
+                            content: mailContent,
+                            UserId: user.id
+                        });
 
-                            res.status(200).json(response); 
-                        }
-                    });
-                }
+                        return new ServiceResponse (200,'notifications send successfully',null)
+                    }
+                });
             }
         }
     } catch (error) {
-        res.status(500).send({message: error.message});
+        return new ServiceResponse (500,error.message,null)
     }
 }
 
-exports.sendFirebaseNotificationToAllUsers = async(req,res) => {
+exports.sendFirebaseNotificationToAllUsers = async(notification_title, notification_body) => {
     try {
-        const {notification_title, notification_body} = req.body;
-        if(!notification_title || !notification_body){
-            res.status(400).send({message: 'user id and notification title and body are required'});
-        }
-        else{
-            const allUsers = await db.User.findOne({where: {
+        let usersData = [];
+        const pageSize = 50;
+        let pageNumber = 1;
+        do{
+            usersData = await db.User.findOne({where: {
                 fcm_token: {
                     [Op.ne]: null
                 }
-            }});
+            }},{
+                limit: pageSize,
+                offset: (pageNumber - 1) * pageSize
+            });
 
-            if(allUsers.length == 0){
-                res.status(400).send({message: 'there is no user has firebase token'});
+            if(!usersData || usersData.length == 0){
+                return new ServiceResponse (400,'there is no user has firebase token',null);
             }
             else{
-                for (const user of allUsers) {
-                    var message = {
-                        to: registration_tokens,
+                for (const user of usersData) {
+                    var notification_message = {
+                        to: user.fcm_token,
         
                         notification: {
                             title: notification_title,
@@ -84,9 +78,9 @@ exports.sendFirebaseNotificationToAllUsers = async(req,res) => {
                         }
                     };
         
-                    fcm.send(message, async(error,response) => {
+                    fcm.send(notification_message, async(error,response) => {
                         if(error){
-                            res.status(500).send({message: error.message});
+                            return new ServiceResponse (500, error.message, null);
                         }
                         else{
                             await db.NotificationsLog.create({
@@ -100,8 +94,8 @@ exports.sendFirebaseNotificationToAllUsers = async(req,res) => {
                     });
                 }
             }
-        }
+        }while(usersData.length > 0)
     } catch (error) {
-        res.status(500).send({message: error.message});
+        return new ServiceResponse (500, error.message, null);
     }
 }

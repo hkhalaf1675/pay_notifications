@@ -18,6 +18,9 @@ app.use(emailRouter);
 const firebaseRouter = require('./routes/FirebaseRoutes');
 app.use(firebaseRouter);
 
+const usersRouter = require('./routes/UsersRoutes');
+app.use(usersRouter);
+
 app.listen(process.env.PORT || 3000, () => {
     console.log("Server Running");
 })

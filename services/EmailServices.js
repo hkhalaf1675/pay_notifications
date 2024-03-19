@@ -1,67 +1,56 @@
-const formData = require('form-data')
-const MailGun = require('mailgun.js');
 const db = require('../Models/main');
-require('dotenv').config();
+const ServiceResponse = require('../templates/ServiceResponse');
+const {mailgun} = require('../config/MessagingConfig')
 
-const mg = new MailGun(formData);
-const mailgun = mg.client({
-        username: process.env.MAILGUN_USERNAME,
-        key: process.env.MAILGUN_APIKEY
-    })
-
-
-    exports.sendMailToOneUser = async(req,res) => {
+exports.sendMailToOneUser = async(userId, mailTitle, mailContent) => {
     try {
-        const {userId , mailTitle, mailContent} = req.body;
-        if(!userId || !mailTitle || !mailContent){
-            res.status(400).send({message: 'user id and mail title and content are required'});
+        const user = await db.User.findOne({where: {
+            userId: userId
+        }});
+
+        if(!user){
+            return new ServiceResponse(404, 'there is no user with that id',null);
         }
         else{
-            const user = await db.User.findOne({where: {
-                userId: userId
-            }});
-
-            if(!user){
-                res.status(400).send({message: 'there is no user with that id'});
-            }
-            else{
-                mailgun.messages.create(process.env.MAILGUN_DOMAIN, {
-                    from: `<${process.env.MAILGUN_USER}>`,
-                    to: `${user.email}`,
-                    subject: `${mailTitle}`,
-                    html: `${mailContent}`,
-                })
-                .then(async(msg) => {
-                    await db.NotificationsLog.create({
-                        type: 'email',
-                        date: new Date(),
-                        title: mailTitle,
-                        content: mailContent,
-                        UserId: user.id
-                    });
-                    res.status(200).send({message: 'mail send successfully'});
-                })
-                .catch(error => {
-                    res.status(500).send({message: `${error.message} - l`});
-                })
-            }
+            mailgun.messages.create(process.env.MAILGUN_DOMAIN, {
+                from: `<${process.env.MAILGUN_USER}>`,
+                to: `${user.email}`,
+                subject: `${mailTitle}`,
+                html: `${mailContent}`,
+            })
+            .then(async(msg) => {
+                await db.NotificationsLog.create({
+                    type: 'email',
+                    date: new Date(),
+                    title: mailTitle,
+                    content: mailContent,
+                    UserId: user.id
+                });
+                return new ServiceResponse(200, 'mail send successfully', null);
+            })
+            .catch(error => {
+                return new ServiceResponse(500, error.message, null);
+            })
         }
     } catch (error) {
-        res.status(500).send({message: error.message});
+        return new ServiceResponse(500,error.message, null);
     }
 }
 
-exports.sendMailToAllUsers = async(req,res) => {
+exports.sendMailToAllUsers = async(mailTitle,mailContent) => {
     try {
-        const {mailTitle, mailContent} = req.body;
-        if(!mailTitle || !mailContent){
-            res.status(400).send({message: 'mail title and content are required'});
-        }
-        else{
-            const allUsers = await db.User.findAll();
+        let usersData = [];
+        const pageSize = 50;
+        let pageNumber = 1;
+        do{
+            usersData = await db.User.findAll({
+                limit: pageSize,
+                offset: (pageNumber - 1) * pageSize
+            });
+
             const usersEmails = [];
             const logData = [];
-            for (const user of allUsers) {
+            for (const user of usersData) {
                 usersEmails.push(user.email);
                 logData.push({
                     type: 'email',
@@ -71,7 +60,8 @@ exports.sendMailToAllUsers = async(req,res) => {
                     UserId: user.id
                 });
             }
-            mailgun.messages.create(process.env.MAILGUN_DOMAIN, {
+
+            await mailgun.messages.create(process.env.MAILGUN_DOMAIN, {
                 from: `<${process.env.MAILGUN_USER}>`,
                 to: usersEmails,
                 subject: `${mailTitle}`,
@@ -79,13 +69,16 @@ exports.sendMailToAllUsers = async(req,res) => {
             })
             .then(async(msg) => {
                 await db.NotificationsLog.bulkCreate(logData);
-                res.status(200).send({message: 'mail send successfully'});
+                return new ServiceResponse(200,'mail send successfully',null);
             })
             .catch(error => {
-                res.status(500).send({message: `${error.message} - l`});
-            })
+                return new ServiceResponse(500,error.message,null);
+            });
+
+            pageNumber++;
         }
+        while(usersData.length > 0)
     } catch (error) {
-        res.status(500).send({message: error.message});
+        return new ServiceResponse(500,error.message,null);
     }
 }

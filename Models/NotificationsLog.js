@@ -1,4 +1,5 @@
 const {sequelize, Sequelize} = require('./main');
+const User = require('./User');
 
 module.exports = (sequelize, Sequelize) => {
     const NotificationsLog = sequelize.define('NotificationsLog', {
@@ -19,6 +20,10 @@ module.exports = (sequelize, Sequelize) => {
             allowNull: false
         }
     });
+
+    // // relation between models
+    // // -- relation between User{One} and NotificationsLog{Many}
+    // NotificationsLog.belongsToMany(User);
 
     return NotificationsLog;
 }
